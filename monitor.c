@@ -1,7 +1,6 @@
 #include "monitor.h"
-#include <semaphore.h>
-#include <stdarg.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 int m_init(struct monitor* m, size_t n, ...){
     va_list ap; 
@@ -44,5 +43,104 @@ int m_init(struct monitor* m, size_t n, ...){
 
     va_end(ap);
     return 0;
+}
+
+struct mreturn m_call(struct monitor* m, void* (*f)(void*), void* args){
+    struct mreturn r;
+    r.a = 0;
+    r.ret = NULL;
+    
+    if (sem_wait(&(m->mutex)) != 0){
+        r.a = -1;
+        return r;
+    }
+
+    r.ret = f(args);
+
+    if (m->n_sleeping > 0){
+        if (sem_post(&(m->sleep)) != 0){
+            sem_post(&(m->mutex));
+            r.a = -1;
+            return r;
+        }
+        m->n_sleeping--;
+    }
+    else{
+        if (sem_post(&(m->mutex)) != 0){
+            r.a = -1;
+            return r;
+        }
+    }
+
+    return r;
+}
+
+int mmutex_sleep(struct monitor* m){
+    int r = 0;
+    size_t oldsleeping = m->n_sleeping;
+    m->n_sleeping++;
+    if (oldsleeping > 0){
+        if (sem_post(&(m->sleep)) != 0){
+            r -= -1;
+        }
+    }
+    if (oldsleeping <= 0 || r == -1){
+        if (sem_post(&(m->mutex)) != 0){
+            r -= -1;
+        }
+    }
+    if (r == -2){
+        perror("mmutex_sleep failed to open either semaphore");
+        exit(EXIT_FAILURE);
+    }
+    if (sem_wait(&(m->sleep)) != 0){
+        r = -1;
+    }
+    m->n_sleeping--;
+    return r;
+}
+
+int mmutex_wait(struct monitor* m, conditional_t* cv){
+    int r = 0;
+    size_t oldsleeping = m->n_sleeping;
+    cv->n++;
+    
+    if (oldsleeping > 0){
+        if (sem_post(&(m->sleep)) != 0){
+            r -= -1;
+        }
+    }
+    if (oldsleeping <= 0 || r == -1){
+        if (sem_post(&(m->mutex)) != 0){
+            r -= -1;
+        }
+    }
+
+    if (r == -2){
+        perror("mmutex_wait failed to open either semaphore");
+        exit(EXIT_FAILURE);
+    }
+    if (sem_wait(&(cv->s)) != 0){
+        r = -1;
+    }
+    cv->n--;
+    return r;
+}
+
+int mmutex_signal(struct monitor* m, conditional_t* cv){
+    int r = 0;
+    if (cv->n > 0){
+        m->n_sleeping++;
+        if (sem_post(&(cv->s)) != 0){
+            r = -1;
+        }
+        if (r == 0){
+            if (sem_wait(&(m->sleep)) != 0){
+                r = -1;
+            }
+        }
+        m->n_sleeping--;
+    }
+    return r;
 }
 
