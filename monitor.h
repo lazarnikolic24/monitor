@@ -23,6 +23,7 @@ struct mreturn{
 
 // ... is n pointers to conditional_t
 int m_init(struct monitor* m, size_t n, ...);
+int m_delete(struct monitor* m);
 
 struct mreturn m_call(struct monitor* m, void* (*f)(void*), void* args);
 

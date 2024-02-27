@@ -45,6 +45,17 @@ int m_init(struct monitor* m, size_t n, ...){
     return 0;
 }
 
+int m_delete(struct monitor* m){
+    int r = 0;
+    for (size_t i = 0; i < m->n_cond; i++){
+        if (sem_destroy(&(m->cond[i]->s)) != 0) r = -1;
+    }
+    free(m->cond);
+    if (sem_destroy(&(m->mutex)) != 0) r = -1;
+    if (sem_destroy(&(m->sleep)) != 0) r = -1;
+    return r;
+}
+
 struct mreturn m_call(struct monitor* m, void* (*f)(void*), void* args){
     struct mreturn r;
     r.a = 0;
